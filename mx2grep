@@ -1,0 +1,109 @@
+#!/usr/bin/env perl
+
+# match on any number of regexps (name, ingredient, anywhere) in one
+# or more recipe files, and generate a valid MX2 file from the results.
+
+use strict;
+use Digest::MD5 qw(md5_base64);
+use Getopt::Long qw(:config no_ignore_case bundling);
+use HTML::Entities;
+
+my @name;
+my @ingredient;
+my @anywhere;
+my $listonly;
+my $Usage = "Usage: $0 [-i ingredient]* [-n name]* [-a any]* [-l] [file ...]\n";
+GetOptions(
+	"anywhere|a=s" => \@anywhere,
+	"ingredient|i=s" => \@ingredient,
+	"listonly|l" => \$listonly,
+	"name|n=s" => \@name,
+) or die $Usage;
+
+push (@ARGV,'-') unless @ARGV;
+
+die $Usage unless @name or @ingredient or @anywhere;
+foreach (@ingredient) {
+	$_ = qr/^<IngR.*\b$_/miaa;
+}
+foreach (@anywhere) {
+	$_ = qr/$_/i;
+}
+foreach (@name) {
+	$_ = qr/$_/i;
+}
+my $match = @anywhere + @ingredient + @name;
+
+my @recipe;
+foreach my $file (@ARGV) {
+	if ($file eq '-') {
+		open(In,"<-:bytes");
+	}else{
+		open(In,"<:bytes",$file) or die "$0: $file: $!\n";
+	}
+	my $recipe;
+	my %md5;
+	my $name;
+	my $insumm;
+	my $inrecipe;
+	while (<In>) {
+		if (/^<RcpE/) {
+			# have to do it this way to deal with unescaped '"' in name
+			my $tmp = $_;
+			$tmp =~ s/ img="[^"]*"//;
+			$tmp =~ s/ author="([^"]*)"//;
+			($name) = $tmp =~ /name="(.*)"/;
+			$inrecipe = 1;
+			$recipe = $_;
+		}elsif (/^<\/RcpE/) {
+			$recipe .= "</RcpE>\r\n";
+			my $md5 = md5_base64($recipe);
+			next if $md5{$md5}++;
+			if (grep($name =~ /$_/,@name)
+				+ grep($recipe =~ /$_/,@ingredient,@anywhere) == $match) {
+				push(@recipe,{name => $name, recipe => $recipe});
+			}
+			$name = undef;
+			$inrecipe = 0;
+		}elsif (/^<Summ/) {
+			$insumm = 1;
+		}elsif (/<\/Summ>/) {
+			$insumm = 0;
+		}elsif ($insumm) {
+			next;
+		}elsif (/<\/mx2>/) {
+			next;
+		}elsif (defined $name) {
+			$recipe .= $_;
+		}
+	}
+	close(In);
+}
+if (@recipe) {
+	if ($listonly) {
+		foreach my $ref (@recipe) {
+			print decode($ref->{name}),"\n";
+		}
+	}else{
+		print <<EOF;
+<?xml version="1.0" standalone="yes" encoding="ISO-8859-1"?>\r
+<!DOCTYPE mx2 SYSTEM "mx2.dtd">\r
+<mx2 source="mx2grep" date="">\r
+<Summ>\r
+EOF
+		foreach my $ref (sort { $a->{name} cmp $b->{name} } @recipe) {
+			print "<Nam>\r\n",$ref->{name},"\r\n</Nam>\r\n";
+		}
+		print "</Summ>\r\n";
+		foreach my $ref (sort { $a->{name} cmp $b->{name} } @recipe) {
+			print $ref->{recipe};
+		}
+		print "</mx2>\r\n";
+	}
+}
+exit 0;
+
+sub decode {
+	my $tmp = decode_entities(decode_entities($_[0]));
+	return $tmp;
+}	

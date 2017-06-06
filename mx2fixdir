@@ -1,0 +1,49 @@
+#!/usr/bin/env perl
+
+# clean up an MX2 file converted from MXP with CB2CB.
+# This works best if all options were disabled in CB2CB; many
+# of them break the DirT contents otherwise.
+
+use strict;
+
+if ($ARGV[0]) {
+	open(In,"<:bytes",$ARGV[0]) or die "$0: $ARGV[0]: $!\n";
+}else{
+	open(In,"<-:bytes");
+}
+my $inDirT;
+my $tmpDirT;
+my @Note;
+while (<In>) {
+	if (/^<DirT.*>/) {
+		$inDirT = 1;
+	}elsif (/^<\/DirT>/) {
+		#cleanup!
+		my @tmp;
+		$tmpDirT =~ tr/\r\n//d;
+		foreach my $dir (split(/(?:&#013;&#010;)+/,$tmpDirT)) {
+			if ($dir =~ /^(Content per Serving|This recipe yields|Comments:|Recipe Source:|ContentRecipe Source:)/ or @Note) {
+				push(@Note,$dir);
+			}else{
+				push(@tmp,$dir);
+			}
+		}
+		print "<DirT>\r\n",join("\r\n</DirT>\r\n<DirT>\r\n",@tmp),
+			"\r\n</DirT>\r\n";
+		$tmpDirT = undef;
+		$inDirT = 0;
+	}elsif ($inDirT) {
+		$tmpDirT .= $_;
+	}elsif (/^<\/Note>/ and @Note) {
+		print "&#013;&#010;",join("&#013;&#010;",@Note);
+		print;
+		@Note = ();
+	}elsif ((/^<Nutr>/ or /^<\/RcpE>/) and @Note) {
+		print "<Note>\r\n",join("&#013;&#010;",@Note),"\r\n</Note>\r\n";
+		print;
+		@Note = ();
+	}else{
+		print;
+	}
+}
+exit 0;

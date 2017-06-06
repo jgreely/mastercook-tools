@@ -1,0 +1,71 @@
+#!/usr/bin/env perl
+
+# combine any number of recipe files into one sorted by name, with
+# duplicates (by MD5 checksum) deleted.
+
+use strict;
+use Digest::MD5 qw(md5_base64);
+
+push (@ARGV,'-') unless @ARGV;
+
+my @recipe;
+my %md5;
+foreach my $file (@ARGV) {
+	if ($file eq '-') {
+		open(In,"<-:bytes");
+	}else{
+		open(In,"<:bytes",$file) or die "$0: $file: $!\n";
+	}
+	my $recipe;
+	my $name;
+	my $insumm;
+	my $inrecipe;
+	while (<In>) {
+		if (/^<RcpE/) {
+			# have to do it this way to deal with unescaped '"' in name
+			my $tmp = $_;
+			$tmp =~ s/ img="[^"]*"//;
+			$tmp =~ s/ author="([^"]*)"//;
+			($name) = $tmp =~ /name="(.*)"/;
+			$inrecipe = 1;
+			$recipe = $_;
+		}elsif (/^<\/RcpE/) {
+			$recipe .= "</RcpE>\r\n";
+			my $md5 = md5_base64($recipe);
+			next if $md5{$md5}++;
+			push(@recipe,{name => $name, recipe => $recipe});
+			$name = undef;
+			$inrecipe = 0;
+		}elsif (/^<Summ/) {
+			$insumm = 1;
+		}elsif (/<\/Summ>/) {
+			$insumm = 0;
+		}elsif ($insumm) {
+			next;
+		}elsif (/<\/mx2>/) {
+			next;
+		}elsif (defined $name) {
+			$recipe .= $_;
+		}
+	}
+	close(In);
+}
+if (@recipe) {
+	print STDERR "WARNING! MasterCook limit is 12000 recipes per file (",
+		@recipe+0," found)\n" if @recipe > 12000;
+	print <<EOF;
+<?xml version="1.0" standalone="yes" encoding="ISO-8859-1"?>\r
+<!DOCTYPE mx2 SYSTEM "mx2.dtd">\r
+<mx2 source="mx2cat" date="">\r
+<Summ>\r
+EOF
+	foreach my $ref (sort { $a->{name} cmp $b->{name} } @recipe) {
+		print "<Nam>\r\n",$ref->{name},"\r\n</Nam>\r\n";
+	}
+	print "</Summ>\r\n";
+	foreach my $ref (sort { $a->{name} cmp $b->{name} } @recipe) {
+		print $ref->{recipe};
+	}
+	print "</mx2>\r\n";
+}
+exit 0;

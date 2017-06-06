@@ -1,0 +1,167 @@
+#!/usr/bin/env perl
+
+use strict;
+use Getopt::Long qw(:config no_ignore_case bundling);
+
+my $output;
+GetOptions(
+	"output|o=s" => \$output,
+);
+my $In = shift;
+my $Out = $output;
+if (! defined $Out) {
+	$Out = $In;
+	$Out = s/\.mx2(-new)?$/.xml/i;
+}
+
+open(In,"<:bytes",$In) or die "$0: $In: $!\n";
+open(Out,"|-:bytes","xmllint --encode UTF-8 - >$Out")
+	or die "$0: xmllint > $Out: $!\n";
+my $tmp = <In>;
+print Out qq(<?xml version="1.0" encoding="ISO-8859-1" standalone="no"?>\n);
+while (<In>) {
+	RawToHTML($_);
+	# oh, for fuck's sake, MasterCook
+	if (/^<RcpE/) {
+		#newer versions may have 'img=..', which I'm stripping out
+		#until I see non-empty examples and can work out how to
+		#handle it (and add it to the DTD!)
+		s/ img="[^"]*"//;
+		s/ author="([^"]*)"//;
+		my $author = $1;
+		my ($name) = /name="(.*)"/;
+		$name =~ s/"/&quot;/g;
+		$name =~ s/&/&amp;/g;
+		$author =~ s/"/&quot;/g;
+		$author =~ s/&/&amp;/g;
+		$_ = '<RcpE';
+		$_ .= qq( name="$name") if defined $name;
+		$_ .= qq( author="$author") if defined $author;
+		$_ .= '>';
+		$_ .= "\n";
+	}elsif (m|^<IngR></IngR>|) {
+		# technically legal, but annoying to deal with in parsing
+		$_ = qq(<IngR name="" code="T"></IngR>\n);
+	}elsif (/^<IngR/) {
+		s/ qty="([^"]*)"//;
+		my $qty = $1;
+		s/ unit="([^"]*)"//;
+		my $unit = $1;
+		s/ code="([^"]*)"//;
+		my $code = $1;
+		my ($name) = /name="(.*)"/;
+		$name =~ s/"/&quot;/g;
+		$name =~ s/&/&amp;/g;
+		my $hasend = m|</IngR|;
+		$_ = '<IngR';
+		$_ .= qq( name="$name") if defined $name;
+		$_ .= qq( unit="$unit") if defined $unit;
+		$_ .= qq( qty="$qty") if defined $qty;
+		$_ .= qq( code="$code") if defined $code;
+		$_ .= '>';
+		$_ .= '</IngR>' if $hasend;
+		$_ .= "\n";
+	}elsif (/^<DirT[^>]*>/) {
+		# stripping out new img attr for now
+		s/^<DirT[^>]*>/<DirT>/;
+	}
+	print Out;
+}
+close(In);
+close(Out);
+
+#convert 8-bit ASCII to HTML4 entities.
+#(this is gross, by the way, but it was easy to write)
+#
+sub RawToHTML {
+	$_ = $_[0];
+	s/\x02//g;
+	s/\x05//;
+	s/\x1f//g; 
+	s/\x11/'/g;
+	s/\x12/'/g;
+	s/\x95/&amp;bull;/g;
+	s/\x96/&amp;ndash;/g;
+	s/\x97/&amp;mdash;/g;
+	s/\x98/&amp;tilde;/g;
+	s/\x99/&amp;trade;/g;
+	s/\xA1/&amp;iexcl;/g;
+	s/\xA2/&amp;cent;/g;
+	s/\xA3/&amp;pound;/g;
+	s/\xA4/&amp;curren;/g;
+	s/\xA5/&amp;yen;/g;
+	s/\xA9/&amp;copy;/g;
+	s/\xAD/&amp;shy;/g; 
+	s/\xAE/&amp;reg;/g;
+	s/\xB0/&amp;deg;/g;
+	s/\xBA/&amp;ordm;/g;
+	s/\xBC/&amp;frac14;/g;
+	s/\xBD/&amp;frac12;/g;
+	s/\xBE/&amp;frac34;/g;
+	s/\xBF/&amp;iquest;/g;
+	s/\xC0/&amp;Agrave;/g;
+	s/\xC1/&amp;Aacute;/g;
+	s/\xC2/&amp;Acirc;/g;
+	s/\xC3/&amp;Atilde;/g;
+	s/\xC4/&amp;Auml;/g;
+	s/\xC5/&amp;Aring;/g;
+	s/\xC6/&amp;AElig;/g;
+	s/\xC7/&amp;Ccedil;/g;
+	s/\xC8/&amp;Egrave;/g;
+	s/\xC9/&amp;Eacute;/g;
+	s/\xCA/&amp;Ecirc;/g;
+	s/\xCB/&amp;Euml;/g;
+	s/\xCC/&amp;Igrave;/g;
+	s/\xCD/&amp;Iacute;/g;
+	s/\xCE/&amp;Icirc;/g;
+	s/\xCF/&amp;Iuml;/g;
+	s/\xD0/&amp;ETH;/g;
+	s/\xD1/&amp;Ntilde;/g;
+	s/\xD2/&amp;Ograve;/g;
+	s/\xD3/&amp;Oacute;/g;
+	s/\xD4/&amp;Ocirc;/g;
+	s/\xD5/&amp;Otilde;/g;
+	s/\xD6/&amp;Ouml;/g;
+	s/\xD7/&amp;times;/g;
+	s/\xD8/&amp;Oslash;/g;
+	s/\xD9/&amp;Ugrave;/g;
+	s/\xDA/&amp;Uacute;/g;
+	s/\xDB/&amp;Ucirc;/g;
+	s/\xDC/&amp;Uuml;/g;
+	s/\xDD/&amp;Yacute;/g;
+	s/\xDE/&amp;THORN;/g;
+	s/\xDF/&amp;szlig;/g;
+	s/\xE0/&amp;agrave;/g;
+	s/\xE1/&amp;aacute;/g;
+	s/\xE2/&amp;acirc;/g;
+	s/\xE3/&amp;tilde;/g;
+	s/\xE4/&amp;auml;/g;
+	s/\xE5/&amp;aring;/g;
+	s/\xE6/&amp;aelig;/g;
+	s/\xE7/&amp;ccedil;/g;
+	s/\xE8/&amp;egrave;/g;
+	s/\xE9/&amp;eacute;/g;
+	s/\xEA/&amp;ecirc;/g;
+	s/\xEB/&amp;euml;/g;
+	s/\xEC/&amp;igrave;/g;
+	s/\xED/&amp;iacute;/g;
+	s/\xEE/&amp;icirc;/g;
+	s/\xEF/&amp;iuml;/g;
+	s/\xF0/&amp;eth;/g;
+	s/\xF1/&amp;ntilde;/g;
+	s/\xF2/&amp;ograv;/g;
+	s/\xF3/&amp;oacute;/g;
+	s/\xF4/&amp;ocirc;/g;
+	s/\xF5/&amp;otilde;/g;
+	s/\xF6/&amp;ouml;/g;
+	s/\xF7/&amp;divide;/g;
+	s/\xF8/&amp;oslash;/g;
+	s/\xF9/&amp;ugrave;/g;
+	s/\xFA/&amp;uacute;/g;
+	s/\xFB/&amp;ucirc;/g;
+	s/\xFC/&amp;uuml;/g;
+	s/\xFD/&amp;yacute;/g;
+	s/\xFE/&amp;thorn;/g;
+	s/\xFF/&amp;yuml;/g;
+	$_[0] = $_;
+}

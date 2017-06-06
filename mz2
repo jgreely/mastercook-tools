@@ -1,0 +1,10 @@
+#!/bin/bash
+
+# mastercook.com only lets you upload MZ2, which is just a zip file
+# containing an MX2 file (with optional image files)
+
+mx2=$1
+mz2=${mx2%.mx2}.mz2
+zip $mz2 $mx2
+exit 0
+

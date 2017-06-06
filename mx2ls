@@ -1,0 +1,60 @@
+#!/usr/bin/env perl
+
+# print the titles of all recipes
+
+use strict;
+use HTML::Entities;
+use Getopt::Long qw(:config no_ignore_case bundling);
+
+my $Usage = "$0 [--sort] [--uniq] [file1.mx2 ...]\n";
+my $sort;
+my $uniq;
+GetOptions(
+	"sort|s" => \$sort,
+	"uniq|u" => \$uniq,
+) or die $Usage;
+
+push (@ARGV,'-') unless @ARGV;
+
+my @recipe;
+foreach my $file (@ARGV) {
+	my @tmp;
+	if ($file eq '-') {
+		open(In,"<-:bytes");
+	}else{
+		open(In,"<:bytes",$file) or die "$0: $file: $!\n";
+	}
+	while (<In>) {
+		if (/^<RcpE/) {
+			# have to do it this way to deal with unescaped '"' in name
+			my $name;
+			my $tmp = $_;
+			$tmp =~ s/ img="[^"]*"//;
+			$tmp =~ s/ author="([^"]*)"//;
+			($name) = $tmp =~ /name="(.*)"/;
+			push (@tmp, $name);
+		}
+	}
+	close(In);
+	if ($uniq) {
+		my %tmp;
+		map(!$tmp{$_}++ && push(@recipe,$_),@tmp);
+	}else{
+		push(@recipe,@tmp);
+	}
+}
+if ($sort) {
+	foreach my $name (sort @recipe) {
+		print decode($name),"\n";
+	}
+}else{
+	foreach my $name (@recipe) {
+		print decode($name),"\n";
+	}
+}
+exit 0;
+
+sub decode {
+	my $tmp = decode_entities(decode_entities($_[0]));
+	return $tmp;
+}	
