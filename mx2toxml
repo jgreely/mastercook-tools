@@ -11,7 +11,7 @@ my $In = shift;
 my $Out = $output;
 if (! defined $Out) {
 	$Out = $In;
-	$Out = s/\.mx2(-new)?$/.xml/i;
+	$Out =~ s/\.mx2$/.xml/i;
 }
 
 open(In,"<:bytes",$In) or die "$0: $In: $!\n";
