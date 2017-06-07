@@ -15,7 +15,22 @@ my $inDirT;
 my $tmpDirT;
 my @Note;
 while (<In>) {
-	if (/^<DirT.*>/) {
+	if (/^<DirT[^>]*>(.*)<\/DirT>/) {
+		$tmpDirT = $1;
+		my @tmp;
+		$tmpDirT =~ tr/\r\n//d;
+		foreach my $dir (split(/(?:&#013;&#010;)+/,$tmpDirT)) {
+			if ($dir =~ /^(Content per Serving|This recipe yields|Comments:|Recipe Source:|ContentRecipe Source:)/ or @Note) {
+				push(@Note,$dir);
+			}else{
+				push(@tmp,$dir);
+			}
+		}
+		print "<DirT>\r\n",join("\r\n</DirT>\r\n<DirT>\r\n",@tmp),
+			"\r\n</DirT>\r\n";
+		$tmpDirT = undef;
+		$inDirT = 0;
+	}elsif (/^<DirT.*>/) {
 		$inDirT = 1;
 	}elsif (/^<\/DirT>/) {
 		#cleanup!
