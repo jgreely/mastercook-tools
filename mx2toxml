@@ -76,10 +76,12 @@ close(Out);
 sub RawToHTML {
 	$_ = $_[0];
 	s/\x02//g;
-	s/\x05//;
+	s/\x05//g;
 	s/\x1f//g; 
 	s/\x11/'/g;
 	s/\x12/'/g;
+	s/\x13/&amp;quot;/g;
+	s/\x14//g; #wtf?
 	s/\x95/&amp;bull;/g;
 	s/\x96/&amp;ndash;/g;
 	s/\x97/&amp;mdash;/g;
