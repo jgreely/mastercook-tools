@@ -6,12 +6,14 @@ use strict;
 use HTML::Entities;
 use Getopt::Long qw(:config no_ignore_case bundling);
 
-my $Usage = "$0 [--sort] [--uniq] [file1.mx2 ...]\n";
+my $Usage = "$0 [--sort] [--uniq] [--count|c] [file1.mx2 ...]\n";
 my $sort;
 my $uniq;
+my $count;
 GetOptions(
 	"sort|s" => \$sort,
 	"uniq|u" => \$uniq,
+	"count|c" => \$count,
 ) or die $Usage;
 
 push (@ARGV,'-') unless @ARGV;
@@ -47,6 +49,8 @@ if ($sort) {
 	foreach my $name (sort @recipe) {
 		print decode($name),"\n";
 	}
+}elsif ($count) {
+		print scalar(@recipe),"\n";
 }else{
 	foreach my $name (@recipe) {
 		print decode($name),"\n";
