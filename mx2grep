@@ -12,12 +12,14 @@ my @name;
 my @ingredient;
 my @anywhere;
 my $listonly;
-my $Usage = "Usage: $0 [-i ingredient]* [-n name]* [-a any]* [-l] [file ...]\n";
+my $except;
+my $Usage = "Usage: $0 [-i ingredient]* [-n name]* [-a any]* [-l] [-v] [file ...]\n";
 GetOptions(
 	"anywhere|a=s" => \@anywhere,
 	"ingredient|i=s" => \@ingredient,
 	"listonly|l" => \$listonly,
 	"name|n=s" => \@name,
+	"except|v" => \$except,
 ) or die $Usage;
 
 push (@ARGV,'-') unless @ARGV;
@@ -32,7 +34,7 @@ foreach (@anywhere) {
 foreach (@name) {
 	$_ = qr/$_/i;
 }
-my $match = @anywhere + @ingredient + @name;
+my $match = $except ? 0 : @anywhere + @ingredient + @name;
 
 my @recipe;
 foreach my $file (@ARGV) {
