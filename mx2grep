@@ -11,11 +11,24 @@ use HTML::Entities;
 my @name;
 my @ingredient;
 my @anywhere;
+my @category;
 my $listonly;
 my $except;
-my $Usage = "Usage: $0 [-i ingredient]* [-n name]* [-a any]* [-l] [-v] [file ...]\n";
+my $Usage = <<EOF;
+Usage: $0 [options] [file ...]
+    -l list recipe names only, rather than full recipes.
+    -v invert selection, matching recipes not containing any of the filters.
+    -n name
+    -c category/cuisine (interchangeable in a lot of source files)
+    -i ingredient
+    -a any
+
+Only recipes matching *all* specified filter will be returned.
+-i, -n, -c, and -a can be repeated as many times as you like.
+EOF
 GetOptions(
 	"anywhere|a=s" => \@anywhere,
+	"category|c=s" => \@category,
 	"ingredient|i=s" => \@ingredient,
 	"listonly|l" => \$listonly,
 	"name|n=s" => \@name,
@@ -24,7 +37,7 @@ GetOptions(
 
 push (@ARGV,'-') unless @ARGV;
 
-die $Usage unless @name or @ingredient or @anywhere;
+die $Usage unless @name or @ingredient or @anywhere or @category;
 foreach (@ingredient) {
 	$_ = qr/^<IngR.*\b$_/miaa;
 }
@@ -34,7 +47,10 @@ foreach (@anywhere) {
 foreach (@name) {
 	$_ = qr/$_/i;
 }
-my $match = $except ? 0 : @anywhere + @ingredient + @name;
+foreach (@category) {
+	$_ = qr/<(Natn|CatT)>[^<]*$_/i;
+}
+my $match = $except ? 0 : @anywhere + @ingredient + @name + @category;
 
 my @recipe;
 foreach my $file (@ARGV) {
@@ -62,7 +78,7 @@ foreach my $file (@ARGV) {
 			my $md5 = md5_base64($recipe);
 			next if $md5{$md5}++;
 			if (grep($name =~ /$_/,@name)
-				+ grep($recipe =~ /$_/,@ingredient,@anywhere) == $match) {
+				+ grep($recipe =~ /$_/,@ingredient,@anywhere,@category) == $match) {
 				push(@recipe,{name => $name, recipe => $recipe});
 			}
 			$name = undef;
