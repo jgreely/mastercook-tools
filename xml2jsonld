@@ -3,6 +3,7 @@
 use strict;
 use XML::Twig;
 use HTML::Entities;
+use JSON;
 use Getopt::Long qw(:config no_ignore_case bundling);
 use Data::Dumper;
 $Data::Dumper::Indent = 1;
@@ -52,7 +53,7 @@ sub print_recipe {
 		normalize_space => 2,
 		keyattr => [], # don't create hashes based on 'name' attr
 	);
-	print_md($recipe);
+	print_json($recipe);
 	$element->delete;
 }
 
@@ -69,7 +70,7 @@ sub fix_ingr {
 	}
 }
 
-sub print_md {
+sub print_json {
 	my ($r) = @_;
 	my $file = CleanTitle($r->{name});
 	my $dir = $outdir;
@@ -79,65 +80,60 @@ sub print_md {
 		$dir = '.' unless $dir;
 	}
 	mkdir($dir) if $dir and ! -d $dir;
-	if (-f "$dir/$file.md") {
+	if (-f "$dir/$file.json") {
 		my $count = 1;
-		while (-f "$dir/$file-$count.md") {
+		while (-f "$dir/$file-$count.json") {
 			$count++;
 		}
 		$file .= "-$count";
 	}
-	my $out = "$dir/$file.md";
-	open(Out,">$out");
-	print Out "+++\n";
+	my $out = "$dir/$file.json";
+	my $recipe = {
+		'@context' => 'http://schema.org/',
+		'@type' => 'Recipe',
+	};
 	my $section = $dir;
 	$section =~ s/\/$//;
 	$section =~ s|^.*/||;
-	printf Out (qq(title = "%s"\n),fmescape($r->{name}))
+	$recipe->{name} = decode($r->{name})
 		if $r->{name};
-	printf Out (qq(author = "%s"\n),fmescape($r->{author}))
+	$recipe->{author} = decode($r->{author})
 		if $r->{author};
-	printf Out (qq(source = "%s"\n),fmescape($r->{Srce}))
-		if $r->{Srce};
-	printf Out (qq(altsource = "%s"\n),join(", ",
-		fmescape($r->{AltS}->{label}),fmescape($r->{AltS}->{source})))
-			if $r->{AltS};
-	printf Out (qq(yield = "%s %s"\n),toint($r->{Yield}->{qty}),
-		fmescape($r->{Yield}->{unit})) if $r->{Yield} and nonzero($r->{Yield}->{qty});
-	printf Out (qq(servings = "%s"\n),$r->{Serv}->{qty})
-		if $r->{Serv} and nonzero($r->{Serv}->{qty});
-	printf Out (qq(categories = ["%s"]\n),
-		join('", "',map(fmescape($_),@{$r->{CatS}->{CatT}})))
+	$recipe->{url} = fmescape($r->{AltS}->{source})
+		if $r->{AltS} and $r->{AltS}->{label} eq 'Internet address';
+	$recipe->{recipeYield} = sprintf("%s %s",toint($r->{Yield}->{qty}),
+		$r->{Yield}->{unit})
+		if $r->{Yield} and nonzero($r->{Yield}->{qty});
+#TODO: figure out if this is accepted, or if I need to put just a
+#primary category here
+	$recipe->{recipeCategory} = join(", ",map(decode($_),@{$r->{CatS}->{CatT}}))
 		if $r->{CatS};
-	printf Out (qq(preptime = "%s"\n),$r->{PrpT}->{elapsed})
+	$recipe->{prepTime} = duration($r->{PrpT}->{elapsed})
 		if $r->{PrpT} and nonzero($r->{PrpT}->{elapsed});
-	printf Out (qq(alttime = "%s"\n),join(": ",$r->{AltT}->{label},
-		$r->{AltT}->{elapsed}))
-		if $r->{AltT} and nonzero($r->{AltT}->{elapsed});
-	printf Out (qq(totaltime = "%s"\n),$r->{TTim}->{elapsed})
+	$recipe->{totalTime} = duration($r->{TTim}->{elapsed})
 		if $r->{TTim} and nonzero($r->{TTim}->{elapsed});
-	printf Out (qq(nationality = "%s"\n),decode($r->{Natn}))
+#TODO: figure out if this is cooking time...
+# unlike altsource, unfortunately, this is freeform, so it could be
+# bake/baking/broiling/cook/cooking/thawing/simmer/refrigerate, with
+# or w/o "Time" appended, and with varying spelling
+#	printf Out (qq(alttime = "%s"\n),join(": ",$r->{AltT}->{label},
+#		$r->{AltT}->{elapsed}))
+#		if $r->{AltT} and nonzero($r->{AltT}->{elapsed});
+	$recipe->{recipeCuisine} = decode($r->{Natn})
 		if $r->{Natn};
-	printf Out (qq(wine = "%s"\n),decode($r->{Wine}))
-		if $r->{Wine};
-	printf Out (qq(copyright = "%s"\n),fmescape($r->{CpyR}))
-		if $r->{CpyR};
-
-	print Out "+++\n\n";
-	print Out "## Description\n\n",$r->{Desc},"\n\n"
+#TODO: try to split out a year and use the rest as the owner
+#	printf Out (qq(copyright = "%s"\n),fmescape($r->{CpyR}))
+#		if $r->{CpyR};
+	$recipe->{description} = decode($r->{Desc})
 		if $r->{Desc};
 	my %ref;
 	if ($r->{IngR}) {
-		print Out "## Ingredients\n\n";
-		print Out <<EOF;
-Quantity            | Ingredient; prep
-:-------------------|:----------------
-EOF
+		my $ingredients = [];
 		foreach my $i (@{$r->{IngR}}) {
 			my $tmp = $i->{qty};
-			$tmp .= ' ' . $i->{unit} if defined $i->{unit};
-			$tmp .= ' ' x (19 - length($tmp));
-			$tmp .= ' | ';
+			$tmp .= ' ' . decode($i->{unit}) if defined $i->{unit};
 			if ($i->{name}) {
+				$tmp .= ' ';
 				$ref{fixup(decode($i->{name}))} = CleanTitle($i->{name})
 					if $i->{code} and $i->{code} eq 'R';
 				$tmp .= $co{$i->{code}} if $i->{code};
@@ -146,45 +142,68 @@ EOF
 			}
 			$tmp .= '; ' . decode($i->{IPrp})
 				if $i->{IPrp};
-			print Out $tmp,"\n";
+			$tmp =~ s/^ *//;
+			push(@$ingredients,$tmp);
 		}
-		print Out "\n\n";
+		$recipe->{recipeIngredient} = $ingredients;
 	}
 	if ($r->{DirS}) {
-		print Out "## Directions\n\n";
+		my $instructions = [];
 		my $count = 0;
 		foreach my $i (@{$r->{DirS}->{DirT}}) {
 			if ($i eq 'XXemptyXX') {
-				print Out "\n";
+				push(@$instructions,"");
 			}else{
 				$count++;
-				print Out "$count. ",decode($i),"\n\n";
+				push(@$instructions,decode($i));
 			}
 		}
+		$recipe->{recipeInstructions} = $instructions;
 	}
-	print Out "\n\n";
-
-	print Out "## Serving Instructions\n\n",decode($r->{SrvI}),"\n\n"
+	my $instructions = $recipe->{recipeInstructions};
+	push(@$instructions,"Serving Instructions: " . decode($r->{SrvI}))
 		if $r->{SrvI};
-	print Out "## Notes\n\n",decode($r->{Note}),"\n\n"
+	push(@$instructions,"Serves: " . $r->{Serv}->{qty})
+		if $r->{Serv} and nonzero($r->{Serv}->{qty});
+	push(@$instructions,"Notes: " . decode($r->{Note}))
 		if $r->{Note};
-	print Out "## Nutrition\n\n",$r->{Nutr},"\n\n"
-		if $r->{Nutr};
-	if ($r->{RatS}) {
-		print Out "## Ratings\n\n";
-		foreach my $rate ($r->{RatS}) {
-			printf Out ("* *%s*: %s\n",decode($rate->{name}),
-				decode($rate->{value}));
-		}
-	}
-	foreach my $key (sort keys %ref) {
-		printf Out (qq({{< embed "%s/%s.md" >}}\n),$section,$ref{$key});
-	}
-	foreach my $key (sort keys %ref) {
-		printf Out (qq([%s]: {{< relref "%s/%s.md" >}}\n),$key,$section,$ref{$key});
-	}
+	push(@$instructions,"Wine: " . decode($r->{Wine}))
+		if $r->{Wine};
+	push(@$instructions,"Source: " . fmescape($r->{Srce}))
+		if $r->{Srce};
+#TODO: parse this for detailed fields, 
+#	print Out "## Nutrition\n\n",$r->{Nutr},"\n\n"
+#		if $r->{Nutr};
+#TODO: figure out how to put this into aggregateRatings, if at all
+#	if ($r->{RatS}) {
+#		print Out "## Ratings\n\n";
+#		foreach my $rate ($r->{RatS}) {
+#			printf Out ("* *%s*: %s\n",decode($rate->{name}),
+#				decode($rate->{value}));
+#		}
+#	}
+	# google validator insists that image is not optional
+	$recipe->{image} = "http://example.com/fake.jpg";
+	open(Out,">$out");
+	print Out to_json($recipe,{pretty => 1});
+	close(Out);
 }
 exit 0;
+
+sub duration {
+	my ($duration) = @_;
+	my ($hour,$minute);
+	if (index($duration,":") > -1) {
+		($hour,$minute) = split(/:/,$_[0]);
+	}elsif ($duration > 59) {
+		$hour = int($duration / 60);
+		$minute = $duration - $hour * 60;
+	}
+	my $tmp = 'PT';
+	$tmp .= $hour . 'H' if $hour > 0;
+	$tmp .= $minute . 'M' if $minute > 0;
+	return $tmp;
+}
 
 sub nonzero {
 	my $tmp = $_[0];
