@@ -1,0 +1,275 @@
+#!/usr/bin/env perl -CADS
+
+use strict;
+use XML::Twig;
+use HTML::Entities;
+use Getopt::Long qw(:config no_ignore_case bundling);
+use Data::Dumper;
+$Data::Dumper::Indent = 1;
+
+my %co = (
+	R => '[',
+	S => '**',
+	I => '',
+	T => '',
+);
+my %cc = (
+	R => ']',
+	S => '**',
+	I => '',
+	T => '',
+);
+
+my $outdir;
+GetOptions(
+	"outdir|o=s" => \$outdir,
+);
+
+my $FILE;
+foreach my $file (@ARGV) {
+	$FILE=$file;
+	my $twig = XML::Twig->new(
+		twig_roots => {
+			RcpE => \&print_recipe,
+			IngR => \&fix_ingr,
+		},
+	);
+	$twig->parsefile($file);
+}
+exit 0;
+
+sub print_recipe {
+	my ($t,$element) = @_;
+	# hack to workaround bug in simplify of empty elements inside forcearray
+	if ($element->first_child('DirS')) {
+		my @DirT = $element->first_child('DirS')->children('DirT');
+		foreach my $dirt (@DirT) {
+			$dirt->set_text('XXemptyXX') if $dirt->text eq '';
+		}
+	}
+	my $recipe = $element->simplify(
+		forcearray => [qw(CatT IngR DirT RatE)],
+		normalize_space => 2,
+		keyattr => [], # don't create hashes based on 'name' attr
+	);
+	print_md($recipe);
+	$element->delete;
+}
+
+sub fix_ingr {
+	# this one's pretty much just rory...
+	my ($t,$e) = @_;
+	if ($e->{att}->{code} and $e->{att}->{unit}
+		and $e->{att}->{code} eq $e->{att}->{unit}) {
+		$e->set_att(code => 'I');
+	}
+	if ($e->{att}->{qty} and $e->{att}->{unit}
+		and $e->{att}->{qty} eq $e->{att}->{unit}) {
+		$e->del_att('unit');
+	}
+}
+
+sub print_md {
+	my ($r) = @_;
+	my $file = CleanTitle($r->{name});
+	my $dir = $outdir;
+	if (!defined $dir) {
+		$dir = $FILE;
+		$dir =~ s|/.*$||;
+		$dir = '.' unless $dir;
+	}
+	mkdir($dir) if $dir and ! -d $dir;
+	if (-f "$dir/$file.md") {
+		my $count = 1;
+		while (-f "$dir/$file-$count.md") {
+			$count++;
+		}
+		$file .= "-$count";
+	}
+	my $out = "$dir/$file.md";
+	open(Out,">$out");
+	print Out "+++\n";
+	my $section = $dir;
+	$section =~ s/\/$//;
+	$section =~ s|^.*/||;
+	printf Out (qq(title = "%s"\n),fmescape($r->{name}))
+		if $r->{name};
+	printf Out (qq(author = "%s"\n),fmescape($r->{author}))
+		if $r->{author};
+	printf Out (qq(source = "%s"\n),fmescape($r->{Srce}))
+		if $r->{Srce};
+	printf Out (qq(altsource = "%s"\n),join(", ",
+		fmescape($r->{AltS}->{label}),fmescape($r->{AltS}->{source})))
+			if $r->{AltS};
+	printf Out (qq(yield = "%s %s"\n),toint($r->{Yield}->{qty}),
+		fmescape($r->{Yield}->{unit})) if $r->{Yield} and nonzero($r->{Yield}->{qty});
+	printf Out (qq(servings = "%s"\n),$r->{Serv}->{qty})
+		if $r->{Serv} and nonzero($r->{Serv}->{qty});
+	printf Out (qq(categories = ["%s"]\n),
+		join('", "',map(fmescape($_),@{$r->{CatS}->{CatT}})))
+		if $r->{CatS};
+	printf Out (qq(preptime = "%s"\n),$r->{PrpT}->{elapsed})
+		if $r->{PrpT} and nonzero($r->{PrpT}->{elapsed});
+	printf Out (qq(alttime = "%s"\n),join(": ",$r->{AltT}->{label},
+		$r->{AltT}->{elapsed}))
+		if $r->{AltT} and nonzero($r->{AltT}->{elapsed});
+	printf Out (qq(totaltime = "%s"\n),$r->{TTim}->{elapsed})
+		if $r->{TTim} and nonzero($r->{TTim}->{elapsed});
+	printf Out (qq(nationality = "%s"\n),decode($r->{Natn}))
+		if $r->{Natn};
+	printf Out (qq(wine = "%s"\n),decode($r->{Wine}))
+		if $r->{Wine};
+	printf Out (qq(copyright = "%s"\n),fmescape($r->{CpyR}))
+		if $r->{CpyR};
+
+	print Out "+++\n\n";
+	print Out "## Description\n\n",$r->{Desc},"\n\n"
+		if $r->{Desc};
+	my %ref;
+	if ($r->{IngR}) {
+		print Out "## Ingredients\n\n";
+		print Out <<EOF;
+Quantity            | Ingredient; prep
+:-------------------|:----------------
+EOF
+		foreach my $i (@{$r->{IngR}}) {
+			my $tmp = $i->{qty};
+			$tmp .= ' ' . $i->{unit} if defined $i->{unit};
+			$tmp .= ' ' x (19 - length($tmp));
+			$tmp .= ' | ';
+			if ($i->{name}) {
+				$ref{fixup(decode($i->{name}))} = CleanTitle($i->{name})
+					if $i->{code} and $i->{code} eq 'R';
+				$tmp .= $co{$i->{code}} if $i->{code};
+				$tmp .= decode($i->{name});
+				$tmp .= $cc{$i->{code}} if $i->{code};
+			}
+			$tmp .= '; ' . decode($i->{IPrp})
+				if $i->{IPrp};
+			print Out $tmp,"\n";
+		}
+		print Out "\n\n";
+	}
+	if ($r->{DirS}) {
+		print Out "## Directions\n\n";
+		my $count = 0;
+		foreach my $i (@{$r->{DirS}->{DirT}}) {
+			if ($i eq 'XXemptyXX') {
+				print Out "\n";
+			}else{
+				$count++;
+				print Out "$count. ",decode($i),"\n\n";
+			}
+		}
+	}
+	print Out "\n\n";
+
+	print Out "## Serving Instructions\n\n",decode($r->{SrvI}),"\n\n"
+		if $r->{SrvI};
+	print Out "## Notes\n\n",decode($r->{Note}),"\n\n"
+		if $r->{Note};
+	print Out "## Nutrition\n\n",$r->{Nutr},"\n\n"
+		if $r->{Nutr};
+	if ($r->{RatS}) {
+		print Out "## Ratings\n\n";
+		foreach my $rate ($r->{RatS}) {
+			printf Out ("* *%s*: %s\n",decode($rate->{name}),
+				decode($rate->{value}));
+		}
+	}
+	foreach my $key (sort keys %ref) {
+		printf Out (qq({{< embed "%s/%s.md" >}}\n),$section,$ref{$key});
+	}
+	foreach my $key (sort keys %ref) {
+		printf Out (qq([%s]: {{< relref "%s/%s.md" >}}\n),$key,$section,$ref{$key});
+	}
+}
+exit 0;
+
+sub nonzero {
+	my $tmp = $_[0];
+	$tmp =~ tr/0//d;
+	return $tmp =~ /[1-9]/;
+}
+
+#recipe references often have trailing comments and/or whitespace
+sub fixup {
+	$_[0] =~ s/^([^(]+)\(.*$/$1/;
+	$_[0] =~ s/\s*$//;
+	return $_[0];
+}
+
+#remove the gratuitous floating point precision
+sub toint {
+	$_[0] =~ s/0+$//;
+	$_[0] =~ s/([0-9])\.$/$1/;
+	return $_[0];
+}
+
+sub decode {
+	my $tmp = decode_entities(decode_entities($_[0]));
+	return $tmp;
+}	
+
+sub fmescape {
+	my $tmp = decode_entities(decode_entities($_[0]));
+	$tmp =~ s/"/\\"/g;
+	$tmp =~ s/\\$//; # one damn recipe where Srce ends in '\'...
+	return $tmp;
+}
+
+#Clean up a string so it can be used as a filename/anchor.
+#Take advantage of the fact that we've converted accented characters
+#to usefully-named HTML entities, and replace them with the plain
+#character (this routine is also used in the search-engine filter).
+#
+sub CleanTitle {
+	$_ = $_[0];
+	s/\s*$//;
+	s/\&(.)grave;/$1/g;
+	s/\&(.)acute;/$1/g;
+	s/\&(.)circ;/$1/g;
+	s/\&(.)tilde;/$1/g;
+	s/\&(.)uml;/$1/g;
+	s/\&(.)ring;/$1/g;
+	s/&[a-z]+;//g;
+	tr/ A-Z/-a-z/;
+	s/<[^>]+>//g;
+	s/[^-a-z0-9]//g;
+	s/-{2,}/-/g;
+	s/^-//;
+	return $_;
+}
+
+__DATA__
+mx2 (source date)
+	Summ - list of all recipes in this file
+		Nam[] - their names
+	RcpE[] *name author
+		RTxt - MXP-formatted recipe
+		Serv (*qty) - #servings
+		PrpT (*elapsed) - prep time
+		CatS
+			CatT[] - categories
+		IngR[] (qty name unit code)
+			IPrp - prep method
+			INtI - Ing Nutr Info (numeric reference)
+			IERp (refname) - *** completely unused
+		DirS
+			DirT[] - recipe directions
+		Desc - flavor text
+		Annot/IAnno - ***completely unused
+		Natn - nationality
+		Srce - source
+		AltS (*label *source) - generally the URL of Srce
+		CpyR - copyright
+		Yield (*unit *qty)
+		TTim (*elapsed) - total time
+		AltT (*label *elapsed) - cook/bake/etc time
+		RatS
+			RatE[] (*name *value) - freeform ratings
+		Wine - wine suggestions
+		SrvI - serving advice
+		Note - notes
+		Nutr - nutrition block
+

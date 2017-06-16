@@ -39,6 +39,11 @@ Has `-l` option to just list the names of the matching recipes.
 just a ZIP file containing an MX2 file, so this is a trivial Bash
 script to do that.
 
+* `xml2md` - convert every recipe in an MX2 file into a separate
+Hugo content file, suitable for my [recipe theme]. This one still
+needs a bit of work, but it does capture every field I've ever
+seen used in an MX2 file.
+
 ## Notes
 
 * While `mx2toxml` and `mz2` write to files, the rest write to STDOUT, and
@@ -55,3 +60,4 @@ options.
 
 [Mad's Recipes]: https://web.archive.org/web/20090630125642/http://www.madsrecipes.com:80/recipes/
 [cb2cb]: http://recipetools.sourceforge.net/joomla3/index.php/cb2cb
+[recipe theme]: https://github.com/jgreely/hugo-theme-recipe
