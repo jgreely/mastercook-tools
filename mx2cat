@@ -5,6 +5,11 @@
 
 use strict;
 use Digest::MD5 qw(md5_base64);
+use Getopt::Long qw(:config no_ignore_case bundling);
+
+my $titlecase;
+GetOptions("titlecase|t" => \$titlecase)
+	or die "UsagE: $0 [--titlecase] [mx2file]\n";
 
 push (@ARGV,'-') unless @ARGV;
 
@@ -28,6 +33,11 @@ foreach my $file (@ARGV) {
 			$tmp =~ s/ author="([^"]*)"//;
 			($name) = $tmp =~ /name="(.*)"/;
 			$inrecipe = 1;
+			if ($titlecase) {
+				my $newname = join(' ',map(ucfirst($_),split(' ',$name)));
+				s/"$name"/"$newname"/;
+				$name = $newname;
+			}
 			$recipe = $_;
 		}elsif (/^<\/RcpE/) {
 			$recipe .= "</RcpE>\r\n";
