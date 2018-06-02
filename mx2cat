@@ -47,6 +47,8 @@ foreach my $file (@ARGV) {
 			$recipe = $_;
 		}elsif (/^<\/RcpE/) {
 			$recipe .= "</RcpE>\r\n";
+			# clean up trailing blank lines inside tags
+			$recipe =~ s/[\r\n]+\r\n</\r\n</g;
 			my $md5 = md5_base64($recipe);
 			next if $md5{$md5}++;
 			push(@recipe,{name => $name, recipe => $recipe});
@@ -61,6 +63,11 @@ foreach my $file (@ARGV) {
 		}elsif (/<\/mx2>/) {
 			next;
 		}elsif (defined $name) {
+			# strip empty ingredient unit ("1 egg", "2 onions", etc)
+			s/\s*unit="\s*"// if /IngR/;
+			# convert <open>text\n?<close>\n to <open>\ntext\n<close>\n
+			$_ = "$1\r\n$2\r\n" if m|^(<[^>/]+>)([^<]+)(</.*>)?\s*$|;
+			$_ .= "$3\r\n" if defined $3;
 			# fix self-closing tags, strip completely empty ones
 			if (m|^<([^/]\S{3})(.*)/>.*$|) {
 				if ($2 =~ /^\s*$/) {
