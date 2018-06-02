@@ -44,6 +44,8 @@ foreach my $file (@ARGV) {
 				s/"$name"/"$newname"/;
 				$name = $newname;
 			}
+			# strip recipe image reference
+			s/ img="[^"]*"//;
 			$recipe = $_;
 		}elsif (/^<\/RcpE/) {
 			$recipe .= "</RcpE>\r\n";

@@ -78,6 +78,8 @@ foreach my $file (@ARGV) {
 			$tmp =~ s/ author="([^"]*)"//;
 			($name) = $tmp =~ /name="(.*)"/;
 			$inrecipe = 1;
+			# strip recipe image reference
+			s/ img="[^"]*"//;
 			$recipe = $_;
 		}elsif (/^<\/RcpE/) {
 			$recipe .= "</RcpE>\r\n";
