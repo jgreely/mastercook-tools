@@ -21,12 +21,17 @@ push (@ARGV,'-') unless @ARGV;
 my @recipe;
 foreach my $file (@ARGV) {
 	my @tmp;
+	my $In;
 	if ($file eq '-') {
-		open(In,"<-:bytes");
+		open($In,"<-:bytes");
 	}else{
-		open(In,"<:bytes",$file) or die "$0: $file: $!\n";
+		open($In,"<:bytes",$file) or die "$0: $file: $!\n";
 	}
-	while (<In>) {
+	my $file = slurp($In);
+	close($In);
+	$file =~ s/></>\n</g;
+	$file =~ tr/\r//d;
+	foreach (split(/\n/, $file)) {
 		if (/^<RcpE/) {
 			# have to do it this way to deal with unescaped '"' in name
 			my $name;
@@ -37,7 +42,6 @@ foreach my $file (@ARGV) {
 			push (@tmp, $name);
 		}
 	}
-	close(In);
 	if ($uniq) {
 		my %tmp;
 		map(!$tmp{$_}++ && push(@recipe,$_),@tmp);
@@ -62,3 +66,8 @@ sub decode {
 	my $tmp = decode_entities(decode_entities($_[0]));
 	return $tmp;
 }	
+
+sub slurp {
+	my ($fh) = @_;
+	do {local $/; <$fh>}
+}

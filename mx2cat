@@ -16,16 +16,22 @@ push (@ARGV,'-') unless @ARGV;
 my @recipe;
 my %md5;
 foreach my $file (@ARGV) {
+	my $In;
 	if ($file eq '-') {
-		open(In,"<-:bytes");
+		open($In,"<-:bytes");
 	}else{
-		open(In,"<:bytes",$file) or die "$0: $file: $!\n";
+		open($In,"<:bytes",$file) or die "$0: $file: $!\n";
 	}
 	my $recipe;
 	my $name;
 	my $insumm;
 	my $inrecipe;
-	while (<In>) {
+	my $file = slurp($In);
+	close($In);
+	$file =~ s/></>\n</g;
+	$file =~ tr/\r//d;
+	foreach (split(/\n/, $file)) {
+		$_ .= "\r\n";
 		if (/^<RcpE/) {
 			# have to do it this way to deal with unescaped '"' in name
 			my $tmp = $_;
@@ -55,6 +61,14 @@ foreach my $file (@ARGV) {
 		}elsif (/<\/mx2>/) {
 			next;
 		}elsif (defined $name) {
+			# fix self-closing tags, strip completely empty ones
+			if (m|^<([^/]\S{3})(.*)/>.*$|) {
+				if ($2 =~ /^\s*$/) {
+					next;
+				} else {
+					$_ = "<$1$2>\r\n</$1>\r\n";
+				}
+			}
 			$recipe .= $_;
 		}
 	}
@@ -79,3 +93,8 @@ EOF
 	print "</mx2>\r\n";
 }
 exit 0;
+
+sub slurp {
+	my ($fh) = @_;
+	do {local $/; <$fh>}
+}

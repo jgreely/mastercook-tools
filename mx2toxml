@@ -14,12 +14,20 @@ if (! defined $Out) {
 	$Out =~ s/\.mx2$/.xml/i;
 }
 
-open(In,"<:bytes",$In) or die "$0: $In: $!\n";
+my $tmp;
+open($tmp,"<:bytes",$In) or die "$0: $In: $!\n";
+my $file = slurp($tmp);
+close($tmp);
 open(Out,"|-:bytes","xmllint --encode UTF-8 - >$Out")
 	or die "$0: xmllint > $Out: $!\n";
-my $tmp = <In>;
 print Out qq(<?xml version="1.0" encoding="ISO-8859-1" standalone="no"?>\n);
-while (<In>) {
+
+$file =~ s/^<\?xml[^>]*>\n?//;
+$file =~ s/></>\n</g;
+$file =~ tr/\r//d;
+
+foreach (split(/\n/, $file)) {
+	$_ .= "\n";
 	RawToHTML($_);
 	# oh, for fuck's sake, MasterCook
 	if (/^<RcpE/) {
@@ -166,4 +174,9 @@ sub RawToHTML {
 	s/\xFE/&amp;thorn;/g;
 	s/\xFF/&amp;yuml;/g;
 	$_[0] = $_;
+}
+
+sub slurp {
+	my ($fh) = @_;
+	do {local $/; <$fh>}
 }
