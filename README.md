@@ -49,11 +49,18 @@ seen used in an MX2 file.
 
 ## Notes
 
-* While `mx2toxml` and `mz2` write to files, the rest write to STDOUT, and
-can read from STDIN.
+* While `mx2split`, `mx2toxml`, and `mz2` write to files, the rest
+write to STDOUT, and can read from STDIN.
 
 * Some MX2 files need manual edits before converting to XML. `xmllint`
 will let you know by barfing on them during the conversion.
+
+* MZ2 files downloaded from [My Mastercook] contain gratuitous
+placeholder images and a single-line MX2 file that violates their DTD
+more than usual. I strip the RcpE's img attribute and insert CRLF
+pairs to make it easier to de-dupe libraries, but I haven't created a
+variant DTD yet that copes with their new quirks, so you can't use
+`xmllint --valid` to verify their structure.
 
 ## Other Tools
 
@@ -62,5 +69,6 @@ Good for quickly converting MXP to MX2, provided you uncheck all the
 options.
 
 [Mad's Recipes]: https://web.archive.org/web/20090630125642/http://www.madsrecipes.com:80/recipes/
+[My Mastercook]: https://www.mastercook.com/app
 [cb2cb]: http://recipetools.sourceforge.net/joomla3/index.php/cb2cb
 [recipe theme]: https://github.com/jgreely/hugo-theme-recipe
