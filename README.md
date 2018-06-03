@@ -35,6 +35,9 @@ Has `-l` option to just list the names of the matching recipes.
 
 * `mx2ls` - list the names of all recipes in one or more MX2 files.
 
+* `mx2split` - write out one MX2 file per recipe. Recombine with
+`mx2cat` after cleaning up duplicates and removing unwanted recipes.
+
 * `mz2` - the MZ2 format required for uploads to mastercook.com is
 just a ZIP file containing an MX2 file, so this is a trivial Bash
 script to do that.

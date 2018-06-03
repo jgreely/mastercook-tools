@@ -1,15 +1,16 @@
 #!/usr/bin/env perl
 
-# combine any number of recipe files into one sorted by name, with
-# duplicates (by MD5 checksum) deleted.
+# split up an MX2 file into single-recipe files, to make it easier
+# to clean it up. Recombine with mx2cat.
 
 use strict;
 use Digest::MD5 qw(md5_base64);
 use Getopt::Long qw(:config no_ignore_case bundling);
 
-my $titlecase;
-GetOptions("titlecase|t" => \$titlecase)
-	or die "Usage: $0 [--titlecase] [mx2file]\n";
+my $prefix = "recipe-";
+GetOptions(
+	"prefix|p=s" => \$prefix,
+) or die "Usage: $0 [--prefix path] [mx2file]\n";
 
 push (@ARGV,'-') unless @ARGV;
 
@@ -39,11 +40,6 @@ foreach my $file (@ARGV) {
 			$tmp =~ s/ author="([^"]*)"//;
 			($name) = $tmp =~ /name="(.*)"/;
 			$inrecipe = 1;
-			if ($titlecase) {
-				my $newname = join(' ',map(ucfirst($_),split(' ',$name)));
-				s/"$name"/"$newname"/;
-				$name = $newname;
-			}
 			# strip recipe image reference
 			s/ img="[^"]*"//;
 			$recipe = $_;
@@ -84,22 +80,22 @@ foreach my $file (@ARGV) {
 	close(In);
 }
 if (@recipe) {
-	print STDERR "WARNING! MasterCook limit is 12000 recipes per file (",
-		@recipe+0," found)\n" if @recipe > 12000;
-	print <<EOF;
+	my $count = 0;
+	foreach my $ref (sort { $a->{name} cmp $b->{name} } @recipe) {
+		my $Out = sprintf("%s%05d.mx2",$prefix,$count++);
+		open(Out,sprintf(">$Out")) or die "$0: $Out: $!\n";
+		print Out <<EOF;
 <?xml version="1.0" standalone="yes" encoding="ISO-8859-1"?>\r
 <!DOCTYPE mx2 SYSTEM "mx2.dtd">\r
-<mx2 source="mx2cat" date="">\r
+<mx2 source="mx2split" date="">\r
 <Summ>\r
 EOF
-	foreach my $ref (sort { $a->{name} cmp $b->{name} } @recipe) {
-		print "<Nam>\r\n",$ref->{name},"\r\n</Nam>\r\n";
+		print Out "<Nam>\r\n",$ref->{name},"\r\n</Nam>\r\n";
+		print Out "</Summ>\r\n";
+		print Out $ref->{recipe};
+		print Out "</mx2>\r\n";
 	}
-	print "</Summ>\r\n";
-	foreach my $ref (sort { $a->{name} cmp $b->{name} } @recipe) {
-		print $ref->{recipe};
-	}
-	print "</mx2>\r\n";
+	close(Out);
 }
 exit 0;
 

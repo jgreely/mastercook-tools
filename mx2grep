@@ -108,7 +108,7 @@ foreach my $file (@ARGV) {
 			$_ = "$1\r\n$2\r\n" if m|^(<[^>/]+>)([^<]+)(</.*>)?\s*$|;
 			$_ .= "$3\r\n" if defined $3;
 			# fix self-closing tags, strip completely empty ones
-			if (m|^<([^/]\S{3})(.*)/>\s*$|) {
+			if (m|^<([^/]\S{3,})(.*)/>\s*$|) {
 				if ($2 =~ /^\s*$/) {
 					next;
 				} else {
