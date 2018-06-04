@@ -83,9 +83,12 @@ foreach my $file (@ARGV) {
 }
 if (@recipe) {
 	my $count = 0;
+	my $Index = sprintf("%sindex.txt",$prefix);
+	open(Index, ">$Index") or die "$0: $Index: $!\n";
 	foreach my $ref (sort { $a->{name} cmp $b->{name} } @recipe) {
+		printf Index ("%05d\t%s\n", $count, $ref->{name});
 		my $Out = sprintf("%s%05d.mx2",$prefix,$count++);
-		open(Out,sprintf(">$Out")) or die "$0: $Out: $!\n";
+		open(Out, ">$Out") or die "$0: $Out: $!\n";
 		print Out <<EOF;
 <?xml version="1.0" standalone="yes" encoding="ISO-8859-1"?>\r
 <!DOCTYPE mx2 SYSTEM "mx2.dtd">\r
@@ -96,8 +99,9 @@ EOF
 		print Out "</Summ>\r\n";
 		print Out $ref->{recipe};
 		print Out "</mx2>\r\n";
+		close(Out);
 	}
-	close(Out);
+	close(Index);
 }
 exit 0;
 
