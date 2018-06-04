@@ -87,6 +87,8 @@ foreach my $file (@ARGV) {
 			$recipe =~ s/>[\r\n]+/>\r\n/g;
 			# clean up trailing blank lines inside tags
 			$recipe =~ s/[\r\n]+\r\n</\r\n</g;
+			#undo line-wrapping of attribute-only tags
+			$recipe =~ s|(\r\n<[^/][^>\r\n]+>)\r\n</|$1</|g;
 			my $md5 = md5_base64($recipe);
 			next if $md5{$md5}++;
 			if (grep($name =~ /$_/,@name)
