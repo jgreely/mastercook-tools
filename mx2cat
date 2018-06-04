@@ -49,6 +49,8 @@ foreach my $file (@ARGV) {
 			$recipe = $_;
 		}elsif (/^<\/RcpE/) {
 			$recipe .= "</RcpE>\r\n";
+			# clean up leading blank lines inside tags
+			$recipe =~ s/>[\r\n]+/>\r\n/g;
 			# clean up trailing blank lines inside tags
 			$recipe =~ s/[\r\n]+\r\n</\r\n</g;
 			my $md5 = md5_base64($recipe);
