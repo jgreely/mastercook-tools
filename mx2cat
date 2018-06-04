@@ -7,9 +7,10 @@ use strict;
 use Digest::MD5 qw(md5_base64);
 use Getopt::Long qw(:config no_ignore_case bundling);
 
+my $mmcfix;
 my $titlecase;
-GetOptions("titlecase|t" => \$titlecase)
-	or die "Usage: $0 [--titlecase] [mx2file]\n";
+GetOptions("titlecase|t" => \$titlecase, "mmcfix|m" => \$mmcfix)
+	or die "Usage: $0 [--titlecase] [--mmcfix] [mx2file]\n";
 
 push (@ARGV,'-') unless @ARGV;
 
@@ -53,8 +54,10 @@ foreach my $file (@ARGV) {
 			$recipe =~ s/>[\r\n]+/>\r\n/g;
 			# clean up trailing blank lines inside tags
 			$recipe =~ s/[\r\n]+\r\n</\r\n</g;
-			#undo line-wrapping of attribute-only tags
+			# undo line-wrapping of attribute-only tags
 			$recipe =~ s|(\r\n<[^/][^>\r\n]+>)\r\n</|$1</|g;
+			# fix mymastercook schema errors
+			$recipe = mmcfix($recipe) if $mmcfix;
 			my $md5 = md5_base64($recipe);
 			next if $md5{$md5}++;
 			push(@recipe,{name => $name, recipe => $recipe});
@@ -110,4 +113,58 @@ exit 0;
 sub slurp {
 	my ($fh) = @_;
 	do {local $/; <$fh>}
+}
+
+# Recipes downloaded from My MasterCook do not validate against the DTD.
+# 1. elements are in the wrong order
+# 2. required attributes are missing
+#
+use feature 'switch';
+no warnings 'experimental';
+sub mmcfix {
+	local ($_) = @_;
+	s|^(<RcpE[^>]*>\r\n)||;
+	my $result = $1;
+	foreach my $tag (qw(RTxt Serv PrpT CatS IngR DirS Desc Natn Srce
+			AltS CpyR Yield TTim AltT RatS Wine SrvI Note Nutr)) {
+		while (m|<$tag|) {
+			s|(<$tag.*?</$tag>\r\n)||s;
+			my $tmp = $1;
+			foreach ($tag) {
+				when ('IERp') {
+					insert_attr($tmp, 'refname');
+				}
+				when (['PrpT','TTim']) {
+					insert_attr($tmp, 'elapsed');
+				}
+				when ('AltT') {
+					insert_attr($tmp, 'label');
+					insert_attr($tmp, 'elapsed');
+				}
+				when ('AltS') {
+					insert_attr($tmp, 'label');
+					insert_attr($tmp, 'source');
+				}
+				when ('Serv') {
+					insert_attr($tmp, 'qty');
+				}
+				when ('Yield') {
+					insert_attr($tmp, 'unit');
+					insert_attr($tmp, 'qty');
+				}
+				when ('RatE') {
+					insert_attr($tmp, 'name');
+					insert_attr($tmp, 'value');
+				}
+			}
+			$result .= $tmp;
+		}
+	}
+	$result .= "</RcpE>\r\n";
+	return $result;
+}
+
+sub insert_attr {
+	my $attr = pop(@_);
+	$_[0] =~ s/\s*>/ $attr="">/ unless $_[0] =~ /$attr/;
 }
